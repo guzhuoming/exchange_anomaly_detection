@@ -330,10 +330,10 @@ if __name__=='__main__':
         temp_rmse, temp_mae, temp_mape = lstm(round(v0), round(v1), round(v2))
         ret = 0
         for jj in range(len(temp_rmse)):
-            ret += temp_rmse[jj]
+            ret += temp_rmse[jj]+temp_mae[jj]+temp_mape[jj]
         return ret
 
-    de = DE(func=f, n_dim=3, size_pop=10, max_iter=10, lb=[8, 5, 8], ub=[128, 80, 128])
+    de = DE(func=f, n_dim=3, size_pop=20, max_iter=100, lb=[8, 5, 8], ub=[128, 80, 128])
     best_x, best_y = de.run()
     print('best_x:', best_x, '\n', 'best_y:', best_y)
     # lstm()

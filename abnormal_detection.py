@@ -298,6 +298,6 @@ def cal_date():
             print(otherStyleTime)
 
 if __name__=='__main__':
-    lstm()
+    # lstm(76, 5, 111)
     # parameter_sensitivity("seq_len", [5, 10, 20, 40, 80])
-    # cal_date()
+    cal_date()
