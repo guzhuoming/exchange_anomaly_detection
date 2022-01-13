@@ -92,7 +92,7 @@ class attention(Layer):
 def model_lstm_att(time_steps, input_dim, n_units):
     K.clear_session()  # 清除之前的模型，省得压满内存
     model_input = Input(shape=(time_steps, input_dim))
-    x = LSTM(n_units, return_sequences=True)(model_input)
+    x = Bidirectional(LSTM(n_units, return_sequences=True))(model_input)
     x = attention()(x)
     x = Dense(1)(x)
     model = Model(model_input, x)
@@ -298,6 +298,7 @@ def cal_date():
             print(otherStyleTime)
 
 if __name__=='__main__':
-    # lstm(76, 5, 111)
+    lstm()
+    # lstm(106, 6, 74)
     # parameter_sensitivity("seq_len", [5, 10, 20, 40, 80])
-    cal_date()
+    # cal_date()

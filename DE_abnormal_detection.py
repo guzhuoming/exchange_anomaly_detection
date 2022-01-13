@@ -330,12 +330,14 @@ if __name__=='__main__':
         temp_rmse, temp_mae, temp_mape = lstm(round(v0), round(v1), round(v2))
         ret = 0
         for jj in range(len(temp_rmse)):
-            ret += temp_rmse[jj]+temp_mae[jj]+temp_mape[jj]
+            ret += temp_rmse[jj]
         return ret
-
+    start = time.clock()
     de = DE(func=f, n_dim=3, size_pop=20, max_iter=100, lb=[8, 5, 8], ub=[128, 80, 128])
     best_x, best_y = de.run()
+    elapsed = (time.clock() - start)
     print('best_x:', best_x, '\n', 'best_y:', best_y)
+    print("Time used:", elapsed)
     # lstm()
     # parameter_sensitivity("seq_len", [5, 10, 20, 40, 80])
     # cal_date()
