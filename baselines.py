@@ -17,10 +17,12 @@ from sklearn.preprocessing import MinMaxScaler
 from matplotlib import pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
+from pmdarima.arima import auto_arima
+from pmdarima.arima import ADFTest
 
 exchanges = ["binance", "coinbase", "huobi", "kraken", "kucoin"]
 error_list = []
-method = "ARIMA"
+method = "SVR"
 
 def data_split(data, train_rate, seq_len, pre_len=1):
     time_len, n_feature = data.shape
@@ -51,7 +53,7 @@ def evaluation(real, pre):
 
     return rmse, mae, mape, r2, var, 1-F_norm
 
-def baseline(p,d,q):
+def baseline():
 
     for i in range(len(exchanges)):
         exchange = exchanges[i]
@@ -66,6 +68,7 @@ def baseline(p,d,q):
         train_rate = 0.8
         train_size = int(time_len * train_rate)
         seq_len = 10
+        # 原始的数据
         trainX, trainY, testX, testY = data_split(data, train_rate=train_rate, seq_len=seq_len)
         scaled_data = data.copy()
 
@@ -76,6 +79,7 @@ def baseline(p,d,q):
             scaler.append(temp_scaler)
             temp = temp.reshape(-1)
             scaled_data[:, j] = temp
+        # 归一化的数据
         trainX1, trainY1, testX1, testY1 = data_split(scaled_data, train_rate=train_rate, seq_len=seq_len)
 
         if method == "HA":
@@ -88,6 +92,7 @@ def baseline(p,d,q):
             print(len(prediction_val))
             print(len(testY1))
             rmse, mae, mape, r2, var, _ = evaluation(testY1, prediction_val)
+            print("exchange = {}".format(exchange))
             print("rmse = {}\nmae = {}\nmape = {}\nr2 = {}\nvar = {}\n".format(rmse, mae, mape, r2, var))
             error_list.append("rmse = {}\nmae = {}\nmape = {}\n".format(rmse, mae, mape))
 
@@ -118,39 +123,174 @@ def baseline(p,d,q):
             plt.savefig('./exchange/figure/ha_prediction' + '/' + exchange + '_ha.png')
             plt.show()
         if method == 'ARIMA':
-            temp_data = data[:,0]
+            if False:
+                #自动选择参数的arima，用来为每一个交易所选择最优参数，但是预测效果不好
+                #原因可能是没有用到测试时间段的信息，所以选择最优参数用后面的arima代码来预测
+                temp_data = df['transaction_amount_usd']
+
+                adf_test = ADFTest(alpha=0.05)
+                print(adf_test.should_diff(temp_data))
+                # 仅使用训练时间段
+                # binance
+                # (0.01, False)
+                # coinbase
+                # (0.1639271547588751, True)
+                # huobi
+                # (0.01, False)
+                # kraken
+                # (0.038886500597949056, False)
+                # kucoin
+                # (0.21528544528481058, True)
+                # True：是平稳序列，不需要差分d=0， False：不是平稳序列，需要差分，d!=0
+
+                train = temp_data[:train_size]
+                test = temp_data[train_size:]
+                prediction = []
+                if i==0 or i==2 or i==3:
+                    arima_model = auto_arima(temp_data, start_p=0, d=1, start_q=0,
+                                             max_p=5, max_d=5, max_q=5, start_P=0,
+                                             D=0, start_Q=0, max_P=5, max_D=5,
+                                             max_Q=5, m=12, seasonal=False)
+                    print(arima_model.summary())
+                    prediction = arima_model.predict(n_periods=time_len-train_size)
+
+                else:
+                    arima_model = auto_arima(temp_data, start_p=0, d=0, start_q=0,
+                                             max_p=5, max_d=5, max_q=5, start_P=0,
+                                             D=0, start_Q=0, max_P=5, max_D=5,
+                                             max_Q=5, m=12, seasonal=False)
+                    print(arima_model.summary())
+                    prediction = arima_model.predict(n_periods=time_len-train_size)
+
+                plt.figure()
+                # plt.plot(test)
+                # plt.plot(prediction)
+                # plt.plot(range(len(temp_data)),temp_data)
+                # plt.plot(train)
+                # plt.plot(test)
+                plt.show()
+                # refer to https://towardsdatascience.com/time-series-forecasting-using-auto-arima-in-python-bb83e49210cd
+            if True:#自己选择参数的arima
+                temp_data = data[:,0]
+                temp_temp_scaler = MinMaxScaler(feature_range=(0, 1))
+                temp_data = temp_temp_scaler.fit_transform(temp_data.reshape(-1,1))
+                history = (temp_data[0:train_size].reshape(1,-1))[0].tolist()
+                print(history)
+                test = testY1.reshape(1,-1)[0]
+                print(test)
+                pred = []
+
+                p, d, q = 1,1,1
+
+                # if i==0:
+                #     p, d, q = 2, 1, 3
+                # elif i==1:
+                #     p, d, q = 1, 0, 2
+                # elif i==2:
+                #     p, d, q = 0, 1, 3
+                # elif i==3:
+                #     p, d, q = 2, 1, 3
+                # elif i==4:
+                #     p, d, q = 2, 0, 2
+
+                # if i==0:
+                #     p, d, q = 5, 1, 1
+                # elif i==1:
+                #     p, d, q = 1, 0, 2
+                # elif i==2:
+                #     p, d, q = 1, 1, 4
+                # elif i==3:
+                #     p, d, q = 3, 1, 3
+                # elif i==4:
+                #     p, d, q = 5, 0, 1
+
+                for t in range(len(test)):
+                    model = ARIMA(history, order=(p,d,q))
+                    model_fit = model.fit()
+                    output = model_fit.forecast()
+                    yhat = output[0]
+                    if yhat[0]<0:
+                        print("ding")
+                        yhat[0] = 0
+                    pred.append(yhat[0])
+                    history.append(test[t])
+                    # history.append(yhat[0])
+                rmse, mae, mape, r2, var, _ = evaluation(test, pred)
+                print("rmse = {}\nmae = {}\nmape = {}\nr2 = {}\nvar = {}\n".format(rmse, mae, mape, r2, var))
+                error_list.append("rmse = {}\nmae = {}\nmape = {}\n".format(rmse, mae, mape))
+                plt.figure(figsize=(10, 5))
+                plt.grid(linestyle="--")
+                pred = temp_temp_scaler.inverse_transform(np.array(pred).reshape(-1, 1))
+                test = temp_temp_scaler.inverse_transform(np.array(test).reshape(-1, 1))
+                plt.plot(range(time_len - train_size), test)
+                plt.plot(range(time_len - train_size), np.array(pred))
+                upper_bound = [it + 3 * np.std(test) for it in pred]
+                lower_bound = [it - 3 * np.std(test) for it in pred]
+                abnormal_x = []
+                abnormal_y = []
+                for j in range(len(upper_bound)):
+                    if testY[j] > upper_bound[j]:
+                        abnormal_x.append(j)
+                        abnormal_y.append(testY[j])
+                plt.plot(range(time_len - train_size), upper_bound, "--")
+                plt.plot(range(time_len - train_size), lower_bound, "--")
+                plt.scatter(abnormal_x, abnormal_y, c="r", marker="x")
+                plt.legend(("real", method, "upper_bound", "lower_bound", "abnormal_detected"), loc=2)
+                plt.xlabel("Days")
+                plt.ylabel("Transaction Amount(USD)")
+                plt.title(exchange)
+                plt.savefig('./exchange/figure/arima_prediction' + '/' + exchange + '_arima.png')
+                plt.show()
+        if method == 'SVR':
+            # print("trainX.shape")
+
+            temp_data = data[:, 0]
             temp_temp_scaler = MinMaxScaler(feature_range=(0, 1))
-            temp_data = temp_temp_scaler.fit_transform(temp_data.reshape(-1,1))
-            history = (temp_data[0:train_size].reshape(1,-1))[0].tolist()
-            print(history)
-            test = testY1.reshape(1,-1)[0]
-            print(test)
-            pred = []
-            # p = 2
-            # d = 1
-            # q = 0
-            for t in range(len(test)):
-                model = ARIMA(history, order=(p,d,q))
-                model_fit = model.fit()
-                output = model_fit.forecast()
-                yhat = output[0]
-                if yhat[0]<0:
-                    print("ding")
-                    yhat[0] = 0
-                pred.append(yhat[0])
-                history.append(test[t])
-                # history.append(yhat[0])
-            rmse, mae, mape, r2, var, _ = evaluation(test, pred)
+            temp_data = temp_temp_scaler.fit_transform(temp_data.reshape(-1, 1))
+
+            trainX = trainX[:, :, 0]
+            trainX1 = trainX1[:, :, 0]
+            testX = testX[:, :, 0]
+            testX1 = testX1[:, :, 0]
+
+            print(trainX.shape)
+            # print(trainY.shape)
+            print(testX.shape)
+            # print(testY.shape)
+            # binance
+            # (1294, 10, 15)
+            # (1294, 1)
+            # (327, 10, 15)
+            # (327, 1)
+
+            # print("trainX.type")
+            # print(type(trainX))
+            # print(type(trainY))
+            # print(type(testX))
+            # print(type(testY))
+
+            # print(trainX)
+
+            svr_model = SVR(kernel='rbf')
+            # svr_model.fit(trainX1, trainY1)
+            # pred = svr_model.predict(testX1)
+            # svr_model.fit(np.concatenate([trainX1, testX1]), np.concatenate([trainY1, testY1]))
+            svr_model.fit(trainX1, trainY1)
+            pred = svr_model.predict(testX1)
+
+            rmse, mae, mape, r2, var, _ = evaluation(testY1, pred)
             print("rmse = {}\nmae = {}\nmape = {}\nr2 = {}\nvar = {}\n".format(rmse, mae, mape, r2, var))
-            error_list.append("rmse = {}\nmae = {}\nmape = {}\n".format(rmse, mae, mape))
+
+            pred = temp_temp_scaler.inverse_transform(pred.reshape(-1, 1))
+
             plt.figure(figsize=(10, 5))
             plt.grid(linestyle="--")
-            pred = temp_temp_scaler.inverse_transform(np.array(pred).reshape(-1, 1))
-            test = temp_temp_scaler.inverse_transform(np.array(test).reshape(-1, 1))
-            plt.plot(range(time_len - train_size), test)
+            # pred = temp_temp_scaler.inverse_transform(np.array(pred).reshape(-1, 1))
+            # test = temp_temp_scaler.inverse_transform(np.array(testY1).reshape(-1, 1))
+            plt.plot(range(time_len - train_size), testY)
             plt.plot(range(time_len - train_size), np.array(pred))
-            upper_bound = [it + 3 * np.std(test) for it in pred]
-            lower_bound = [it - 3 * np.std(test) for it in pred]
+            upper_bound = [it + 3 * np.std(testY) for it in pred]
+            lower_bound = [it - 3 * np.std(testY) for it in pred]
             abnormal_x = []
             abnormal_y = []
             for j in range(len(upper_bound)):
@@ -164,7 +304,7 @@ def baseline(p,d,q):
             plt.xlabel("Days")
             plt.ylabel("Transaction Amount(USD)")
             plt.title(exchange)
-            plt.savefig('./exchange/figure/arima_prediction_'+str(p)+str(d)+str(q) + '/' + exchange + '_arima.png')
+            plt.savefig('./exchange/figure/svr_prediction' + '/' + exchange + '_svr.png')
             plt.show()
 
 # for i in range(len(exchanges)):
@@ -172,4 +312,4 @@ def baseline(p,d,q):
 #     print(error_list[i])
 
 if __name__=='__main__':
-    baseline(p=1,d=0,q=0)
+    baseline()
