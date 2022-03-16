@@ -35,7 +35,7 @@ tensorflow.random.set_seed(2)
 exchanges = ["binance", "coinbase", "huobi", "kraken", "kucoin"]
 
 beginDates = ['2021-01-30', '2021-11-05', '2020-11-03', '2020-06-25', '2021-02-15']
-    endDates = ['2021-12-23', '2021-12-24', '2021-09-15', '2021-09-15', '2021-12-24']
+endDates = ['2021-12-23', '2021-12-24', '2021-09-15', '2021-09-15', '2021-12-24']
 
 # class Attention(Layer):
 #
@@ -279,7 +279,7 @@ def lstm(n_units=64, seq_len=10, batch_size=64):
             ax.plot(x_range, upper_bound, "--")
             ax.plot(x_range, lower_bound, "--")
             ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-            plt.legend(("real", model_name, "upper_bound", "lower_bound", "abnormal_detected"), loc=2)
+            plt.legend(("Real", model_name, "Upper bound", "Lower bound", "Anomaly detected"), loc=2)
             plt.title(exchange.title())
             plt.xlabel("时间", font1)
             # plt.ylabel("Transaction Amount(USD)")
@@ -322,7 +322,7 @@ def parameter_sensitivity(parameter, para_range):
         else:
             plt.legend(("RMSE", "MAE", "MAPE"))
         plt.xlabel(parameter)
-        plt.ylabel("Normalised Values")
+        plt.ylabel("归一化值",font1)
         plt.title(exchange.title())
         plt.savefig('./exchange/figure/para_' + parameter + '_' + exchange + '.png')
         plt.show()
@@ -344,7 +344,9 @@ def cal_date():
             print(otherStyleTime)
 
 if __name__=='__main__':
-    # lstm()
+    lstm()
     # lstm(106, 6, 74)
-    parameter_sensitivity("Batch size", [16,32,64,128,256,512])
+    # parameter_sensitivity("Batch size", [16,32,64,128,256,512])
+    # parameter_sensitivity("Number of hidden units", [16,32,64,128])
+    # parameter_sensitivity("Sequence length", [5,10,20,40,80])
     # cal_date()
