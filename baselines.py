@@ -318,8 +318,7 @@ def baseline():
 
                 pred = temp_temp_scaler.inverse_transform(np.array(pred).reshape(-1, 1))
                 test = temp_temp_scaler.inverse_transform(np.array(test).reshape(-1, 1))
-                plt.plot(range(time_len - train_size), test)
-                plt.plot(range(time_len - train_size), np.array(pred))
+
                 upper_bound = [it + 3 * np.std(test) for it in pred]
                 lower_bound = [it - 3 * np.std(test) for it in pred]
 

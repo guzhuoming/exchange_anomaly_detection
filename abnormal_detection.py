@@ -24,9 +24,18 @@ from xgboost import XGBRegressor
 import tensorflow
 import numpy.linalg as la
 import time
+import matplotlib.dates as mdates
+# plt.rcParams['font.sans-serif'] = ['Times New Roman']  # 用来正常显示中文标签
+# plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+font1 = {'family': 'Microsoft YaHei',
+         'weight': 'normal',
+         'size': 13}
 tensorflow.random.set_seed(2)
 
 exchanges = ["binance", "coinbase", "huobi", "kraken", "kucoin"]
+
+beginDates = ['2021-01-30', '2021-11-05', '2020-11-03', '2020-06-25', '2021-02-15']
+    endDates = ['2021-12-23', '2021-12-24', '2021-09-15', '2021-09-15', '2021-12-24']
 
 # class Attention(Layer):
 #
@@ -216,32 +225,65 @@ def lstm(n_units=64, seq_len=10, batch_size=64):
         print(type(prediction_val))
 
         if True:
-            plt.figure(figsize=(10, 5))
-            plt.grid(linestyle="--")
-            plt.plot(range(time_len-train_size), testY)
-            plt.plot(range(time_len-train_size), np.array(prediction_val))
+            # plt.figure(figsize=(10, 4))
+            # plt.grid(linestyle="--")
+            # plt.plot(range(time_len-train_size), testY)
+            # plt.plot(range(time_len-train_size), np.array(prediction_val))
             upper_bound = [it + 3 * np.std(testY) for it in prediction_val]
             lower_bound = [it - 3 * np.std(testY) for it in prediction_val]
+
+            fig, ax = plt.subplots(figsize=(10, 4))
+            beginDate = beginDates[i]
+            endDate = endDates[i]
+
+            x = np.arange(mdates.datestr2num(beginDate), mdates.datestr2num(endDate))
+            x_range = [np.datetime64(int(c), 'D') for c in x]
+            # plt.figure(figsize=(10, 4))
+            # plt.grid(linestyle="--")
+
             abnormal_x = []
             abnormal_y = []
             for j in range(len(upper_bound)):
-                if testY[j]>upper_bound[j]:
-                    abnormal_x.append(j)
+                if testY[j] > upper_bound[j]:
+                    abnormal_x.append(x_range[j])
                     abnormal_y.append(testY[j])
-            print(exchange)
-            print("abnormal_x")
-            print(abnormal_x)
-            print("abnormal_y")
-            print(abnormal_y)
-            print("train_size+x")
-            print([it+train_size for it in abnormal_x])
-            plt.plot(range(time_len-train_size), upper_bound, "--")
-            plt.plot(range(time_len-train_size), lower_bound, "--")
-            plt.scatter(abnormal_x, abnormal_y, c="r", marker="x")
+
+            """设置坐标轴的格式"""
+            # 设置主刻度, 每6个月一个刻度
+            fmt_half_year = mdates.MonthLocator(interval=1)
+            ax.xaxis.set_major_locator(fmt_half_year)
+
+            # 设置次刻度，每个月一个刻度
+            fmt_month = mdates.MonthLocator()  # 默认即可
+            ax.xaxis.set_minor_locator(fmt_month)
+
+            # 设置 x 坐标轴的刻度格式
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+
+            # 设置横坐标轴的范围
+            datemin = np.datetime64(x_range[0], 'M')
+            # datemax = np.datetime64(x_range[-1], 'Y') + np.timedelta64(1, 'Y')
+            datemax = np.datetime64(x_range[-1], 'M') + np.timedelta64(1, 'M')
+            ax.set_xlim(datemin, datemax)
+
+            # 设置刻度的显示格式
+            ax.format_xdata = mdates.DateFormatter('%Y-%m')
+            ax.format_ydata = lambda x: f'$x:.2f$'
+            ax.grid(True)
+            """自动调整刻度字符串"""
+            # 自动调整 x 轴的刻度字符串（旋转）使得每个字符串有足够的空间而不重叠
+            fig.autofmt_xdate()
+
+            ax.plot(x_range, testY)
+            ax.plot(x_range, np.array(prediction_val))
+            ax.plot(x_range, upper_bound, "--")
+            ax.plot(x_range, lower_bound, "--")
+            ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
             plt.legend(("real", model_name, "upper_bound", "lower_bound", "abnormal_detected"), loc=2)
-            plt.title(exchange)
-            plt.xlabel("Days")
-            plt.ylabel("Transaction Amount(USD)")
+            plt.title(exchange.title())
+            plt.xlabel("时间", font1)
+            # plt.ylabel("Transaction Amount(USD)")
+            plt.ylabel("交易量（美元）", font1)
             plt.savefig('./exchange/figure/lstm_prediction_' + exchange + '_' + model_name + '_prediction.png')
             plt.show()
     for i in range(len(exchanges)):
@@ -254,11 +296,11 @@ def parameter_sensitivity(parameter, para_range):
     mae_list = [[] for i in range(len(exchanges))]
     mape_list = [[] for i in range(len(exchanges))]
     for it in para_range:
-        if parameter=="n_units":
+        if parameter=="Number of hidden units":
             temp_rmse, temp_mae, temp_mape = lstm(n_units=it)
-        if parameter=="seq_len":
+        if parameter=="Sequence length":
             temp_rmse, temp_mae, temp_mape = lstm(seq_len=it)
-        if parameter == "batch_size":
+        if parameter == "Batch size":
             temp_rmse, temp_mae, temp_mape = lstm(batch_size=it)
         for jj in range(len(temp_rmse)):
             rmse_list[jj].append(temp_rmse[jj])
@@ -269,15 +311,19 @@ def parameter_sensitivity(parameter, para_range):
         rmse_list[i],_,_ = min_max_scaler(rmse_list[i])
         mae_list[i],_,_ = min_max_scaler(mae_list[i])
         mape_list[i],_,_ = min_max_scaler(mape_list[i])
-        plt.figure()
+        plt.figure(figsize=(5, 4))
+
         plt.grid(linestyle="--")
         plt.plot(para_range, rmse_list[i])
         plt.plot(para_range, mae_list[i])
         plt.plot(para_range, mape_list[i])
-        plt.legend(("RMSE", "MAE", "MAPE"))
+        if i==0:
+            plt.legend(("RMSE", "MAE", "MAPE"), loc='lower right')
+        else:
+            plt.legend(("RMSE", "MAE", "MAPE"))
         plt.xlabel(parameter)
         plt.ylabel("Normalised Values")
-        plt.title(exchange)
+        plt.title(exchange.title())
         plt.savefig('./exchange/figure/para_' + parameter + '_' + exchange + '.png')
         plt.show()
 
@@ -298,7 +344,7 @@ def cal_date():
             print(otherStyleTime)
 
 if __name__=='__main__':
-    lstm()
+    # lstm()
     # lstm(106, 6, 74)
-    # parameter_sensitivity("seq_len", [5, 10, 20, 40, 80])
+    parameter_sensitivity("Batch size", [16,32,64,128,256,512])
     # cal_date()
