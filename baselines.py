@@ -19,14 +19,31 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from pmdarima.arima import auto_arima
 from pmdarima.arima import ADFTest
+import matplotlib.dates as mdates
+# plt.rcParams['font.sans-serif'] = ['Times New Roman']  # 用来正常显示中文标签
+# plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+font1 = {'family': 'Microsoft YaHei',
+         'weight': 'normal',
+         'size': 13}
 
 exchanges = ["binance", "coinbase", "huobi", "kraken", "kucoin"]
 error_list = []
-method = "SVR"
+method = "ARIMA"
 
 def data_split(data, train_rate, seq_len, pre_len=1):
     time_len, n_feature = data.shape
     train_size = int(time_len * train_rate)
+    print("time_len = {}".format(time_len))
+    print("train_size = {}".format(train_size))
+    print("test_size = {}".format(time_len-train_size))
+
+    # 交易所    开始时间     time_len   train_size    test_size   测试集开始时间    测试集结束时间
+    # Binance  1499212800   1632        1305           327       2021-01-30      2021-12-23
+    # Coinbase 1619481600   241         192            49        2021-11-05      2021-12-24
+    # Huobi    1495497600   1576        1260           316       2020-11-03      2021-09-15
+    # Kraken   1438905600   2231        1784           447       2020-06-25      2021-09-15
+    # Kucoin   1505606400   1559        1247           312       2021-02-15      2021-12-24
+
     train_data = data[0:train_size]
     trainX, trainY, testX, testY = [], [], [], []
     for i in range(train_size-seq_len-pre_len):
@@ -54,6 +71,27 @@ def evaluation(real, pre):
     return rmse, mae, mape, r2, var, 1-F_norm
 
 def baseline():
+    li = []
+    # li.append([1400, 1415, 1416, 1420, 1421, 1543])
+    # li.append([222])
+    # li.append([1413, 1450, 1501])
+    # li.append([2097, 2111, 2113])
+    # li.append([1463, 1503, 1522, 1542])
+
+    li.append([95, 110, 111, 115, 116, 238])
+    li.append([30])
+    li.append([153, 190, 241])
+    li.append([313, 327, 329])
+    li.append([216, 256, 275, 295])
+
+    # 1305  lstm:  ha:95,115,238
+    # 192   lstm:  ha:30
+    # 1260  lstm:  ha:153,190,241
+    # 1784  lstm:  ha:313
+    # 1247  lstm:  ha:256,275,295
+
+    beginDates = ['2021-01-30', '2021-11-05', '2020-11-03', '2020-06-25', '2021-02-15']
+    endDates = ['2021-12-23', '2021-12-24', '2021-09-15', '2021-09-15', '2021-12-24']
 
     for i in range(len(exchanges)):
         exchange = exchanges[i]
@@ -103,23 +141,76 @@ def baseline():
             testY = testY[:, 0]
             upper_bound = [it + 3 * np.std(testY) for it in prediction_val]
             lower_bound = [it - 3 * np.std(testY) for it in prediction_val]
+
+            # 打印miss
+            # for j in range(len(upper_bound)):
+            #     if testY[j] > upper_bound[j]:
+            #         abnormal_x.append(j)
+            #         abnormal_y.append(testY[j])
+
+
+            fig, ax = plt.subplots(figsize=(10, 4))
+            beginDate = beginDates[i]
+            endDate = endDates[i]
+
+
+            x = np.arange(mdates.datestr2num(beginDate), mdates.datestr2num(endDate))
+            x_range = [np.datetime64(int(c), 'D') for c in x]
+            # plt.figure(figsize=(10, 4))
+            # plt.grid(linestyle="--")
+
             abnormal_x = []
             abnormal_y = []
             for j in range(len(upper_bound)):
                 if testY[j] > upper_bound[j]:
-                    abnormal_x.append(j)
+                    abnormal_x.append(x_range[j])
                     abnormal_y.append(testY[j])
-            plt.figure(figsize=(10, 5))
-            plt.grid(linestyle="--")
-            plt.plot(range(time_len-train_size), testY)
-            plt.plot(range(time_len - train_size), np.array(prediction_val))
-            plt.plot(range(time_len - train_size), upper_bound, "--")
-            plt.plot(range(time_len - train_size), lower_bound, "--")
-            plt.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-            plt.legend(("real", method, "upper_bound", "lower_bound", "abnormal_detected"), loc=2)
-            plt.title(exchange)
-            plt.xlabel("Days")
-            plt.ylabel("Transaction Amount(USD)")
+
+            miss_x = []
+            miss_y = []
+            for j in range(len(li[i])):
+                if x_range[li[i][j]] not in abnormal_x:
+                    miss_x.append(x_range[li[i][j]])
+                    miss_y.append(testY[li[i][j]])
+
+
+            """设置坐标轴的格式"""
+            # 设置主刻度, 每6个月一个刻度
+            fmt_half_year = mdates.MonthLocator(interval=1)
+            ax.xaxis.set_major_locator(fmt_half_year)
+
+            # 设置次刻度，每个月一个刻度
+            fmt_month = mdates.MonthLocator()  # 默认即可
+            ax.xaxis.set_minor_locator(fmt_month)
+
+            # 设置 x 坐标轴的刻度格式
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+
+            # 设置横坐标轴的范围
+            datemin = np.datetime64(x_range[0], 'M')
+            # datemax = np.datetime64(x_range[-1], 'Y') + np.timedelta64(1, 'Y')
+            datemax = np.datetime64(x_range[-1], 'M') + np.timedelta64(1, 'M')
+            ax.set_xlim(datemin, datemax)
+
+            # 设置刻度的显示格式
+            ax.format_xdata = mdates.DateFormatter('%Y-%m')
+            ax.format_ydata = lambda x: f'$x:.2f$'
+            ax.grid(True)
+            """自动调整刻度字符串"""
+            # 自动调整 x 轴的刻度字符串（旋转）使得每个字符串有足够的空间而不重叠
+            fig.autofmt_xdate()
+
+            ax.plot(x_range, testY)
+            ax.plot(x_range, np.array(prediction_val))
+            ax.plot(x_range, upper_bound, "--")
+            ax.plot(x_range, lower_bound, "--")
+            ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
+            ax.scatter(miss_x, miss_y, c="dimgrey", marker="x")
+            plt.legend(("Real", method, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
+            plt.title(exchange.title())
+            plt.xlabel("时间",font1)
+            # plt.ylabel("Transaction Amount(USD)")
+            plt.ylabel("交易量（美元）",font1)
             plt.savefig('./exchange/figure/ha_prediction' + '/' + exchange + '_ha.png')
             plt.show()
         if method == 'ARIMA':
@@ -218,27 +309,71 @@ def baseline():
                 rmse, mae, mape, r2, var, _ = evaluation(test, pred)
                 print("rmse = {}\nmae = {}\nmape = {}\nr2 = {}\nvar = {}\n".format(rmse, mae, mape, r2, var))
                 error_list.append("rmse = {}\nmae = {}\nmape = {}\n".format(rmse, mae, mape))
-                plt.figure(figsize=(10, 5))
-                plt.grid(linestyle="--")
+
+                fig, ax = plt.subplots(figsize=(10, 4))
+                beginDate = beginDates[i]
+                endDate = endDates[i]
+                x = np.arange(mdates.datestr2num(beginDate), mdates.datestr2num(endDate))
+                x_range = [np.datetime64(int(c), 'D') for c in x]
+
                 pred = temp_temp_scaler.inverse_transform(np.array(pred).reshape(-1, 1))
                 test = temp_temp_scaler.inverse_transform(np.array(test).reshape(-1, 1))
                 plt.plot(range(time_len - train_size), test)
                 plt.plot(range(time_len - train_size), np.array(pred))
                 upper_bound = [it + 3 * np.std(test) for it in pred]
                 lower_bound = [it - 3 * np.std(test) for it in pred]
+
                 abnormal_x = []
                 abnormal_y = []
                 for j in range(len(upper_bound)):
                     if testY[j] > upper_bound[j]:
-                        abnormal_x.append(j)
+                        abnormal_x.append(x_range[j])
                         abnormal_y.append(testY[j])
-                plt.plot(range(time_len - train_size), upper_bound, "--")
-                plt.plot(range(time_len - train_size), lower_bound, "--")
-                plt.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-                plt.legend(("real", method, "upper_bound", "lower_bound", "abnormal_detected"), loc=2)
-                plt.xlabel("Days")
-                plt.ylabel("Transaction Amount(USD)")
-                plt.title(exchange)
+
+                miss_x = []
+                miss_y = []
+                for j in range(len(li[i])):
+                    if x_range[li[i][j]] not in abnormal_x:
+                        miss_x.append(x_range[li[i][j]])
+                        miss_y.append(testY[li[i][j]])
+
+                """设置坐标轴的格式"""
+                # 设置主刻度, 每6个月一个刻度
+                fmt_half_year = mdates.MonthLocator(interval=1)
+                ax.xaxis.set_major_locator(fmt_half_year)
+
+                # 设置次刻度，每个月一个刻度
+                fmt_month = mdates.MonthLocator()  # 默认即可
+                ax.xaxis.set_minor_locator(fmt_month)
+
+                # 设置 x 坐标轴的刻度格式
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+
+                # 设置横坐标轴的范围
+                datemin = np.datetime64(x_range[0], 'M')
+                # datemax = np.datetime64(x_range[-1], 'Y') + np.timedelta64(1, 'Y')
+                datemax = np.datetime64(x_range[-1], 'M') + np.timedelta64(1, 'M')
+                ax.set_xlim(datemin, datemax)
+
+                # 设置刻度的显示格式
+                ax.format_xdata = mdates.DateFormatter('%Y-%m')
+                ax.format_ydata = lambda x: f'$x:.2f$'
+                ax.grid(True)
+                """自动调整刻度字符串"""
+                # 自动调整 x 轴的刻度字符串（旋转）使得每个字符串有足够的空间而不重叠
+                fig.autofmt_xdate()
+
+                ax.plot(x_range, testY)
+                ax.plot(x_range, np.array(pred))
+                ax.plot(x_range, upper_bound, "--")
+                ax.plot(x_range, lower_bound, "--")
+                ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
+                ax.scatter(miss_x, miss_y, c="dimgrey", marker="x")
+                plt.legend(("Real", method, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
+                plt.title(exchange.title())
+                plt.xlabel("时间", font1)
+                # plt.ylabel("Transaction Amount(USD)")
+                plt.ylabel("交易量（美元）", font1)
                 plt.savefig('./exchange/figure/arima_prediction' + '/' + exchange + '_arima.png')
                 plt.show()
         if method == 'SVR':
@@ -270,40 +405,104 @@ def baseline():
             # print(type(testY))
 
             # print(trainX)
+            # for t in range(len(test)):
+            #     model = ARIMA(history, order=(p, d, q))
+            #     model_fit = model.fit()
+            #     output = model_fit.forecast()
+            #     yhat = output[0]
+            #     if yhat[0] < 0:
+            #         print("ding")
+            #         yhat[0] = 0
+            #     pred.append(yhat[0])
+            #     history.append(test[t])
+            pred = []
+            for t in range(len(testX)):
+                # print("t = {}".format(t))
 
-            svr_model = SVR(kernel='rbf')
-            # svr_model.fit(trainX1, trainY1)
-            # pred = svr_model.predict(testX1)
-            # svr_model.fit(np.concatenate([trainX1, testX1]), np.concatenate([trainY1, testY1]))
-            svr_model.fit(trainX1, trainY1)
-            pred = svr_model.predict(testX1)
+                svr_model = SVR(kernel='rbf')
+                # svr_model.fit(trainX1, trainY1)
+                # pred = svr_model.predict(testX1)
+                # svr_model.fit(np.concatenate([trainX1, testX1]), np.concatenate([trainY1, testY1]))
+                svr_model.fit(trainX1, trainY1)
+                output = svr_model.predict(testX1[t:])
 
+                yhat = output[0]
+                if yhat < 0:
+                    print("ding")
+                    yhat = 0
+                pred.append(yhat)
+
+                trainX1 = np.concatenate([trainX1, testX1[t:t+1]])
+                trainY1 = np.concatenate([trainY1, testY1[t:t+1]])
+
+            pred = np.array(pred)
             rmse, mae, mape, r2, var, _ = evaluation(testY1, pred)
             print("rmse = {}\nmae = {}\nmape = {}\nr2 = {}\nvar = {}\n".format(rmse, mae, mape, r2, var))
 
             pred = temp_temp_scaler.inverse_transform(pred.reshape(-1, 1))
 
-            plt.figure(figsize=(10, 5))
-            plt.grid(linestyle="--")
+            fig, ax = plt.subplots(figsize=(10, 4))
+            beginDate = beginDates[i]
+            endDate = endDates[i]
             # pred = temp_temp_scaler.inverse_transform(np.array(pred).reshape(-1, 1))
             # test = temp_temp_scaler.inverse_transform(np.array(testY1).reshape(-1, 1))
-            plt.plot(range(time_len - train_size), testY)
-            plt.plot(range(time_len - train_size), np.array(pred))
+            x = np.arange(mdates.datestr2num(beginDate), mdates.datestr2num(endDate))
+            x_range = [np.datetime64(int(c), 'D') for c in x]
+
             upper_bound = [it + 3 * np.std(testY) for it in pred]
             lower_bound = [it - 3 * np.std(testY) for it in pred]
+
             abnormal_x = []
             abnormal_y = []
             for j in range(len(upper_bound)):
                 if testY[j] > upper_bound[j]:
-                    abnormal_x.append(j)
+                    abnormal_x.append(x_range[j])
                     abnormal_y.append(testY[j])
-            plt.plot(range(time_len - train_size), upper_bound, "--")
-            plt.plot(range(time_len - train_size), lower_bound, "--")
-            plt.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-            plt.legend(("real", method, "upper_bound", "lower_bound", "abnormal_detected"), loc=2)
-            plt.xlabel("Days")
-            plt.ylabel("Transaction Amount(USD)")
-            plt.title(exchange)
+
+            miss_x = []
+            miss_y = []
+            for j in range(len(li[i])):
+                if x_range[li[i][j]] not in abnormal_x:
+                    miss_x.append(x_range[li[i][j]])
+                    miss_y.append(testY[li[i][j]])
+
+            """设置坐标轴的格式"""
+            # 设置主刻度, 每6个月一个刻度
+            fmt_half_year = mdates.MonthLocator(interval=1)
+            ax.xaxis.set_major_locator(fmt_half_year)
+
+            # 设置次刻度，每个月一个刻度
+            fmt_month = mdates.MonthLocator()  # 默认即可
+            ax.xaxis.set_minor_locator(fmt_month)
+
+            # 设置 x 坐标轴的刻度格式
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+
+            # 设置横坐标轴的范围
+            datemin = np.datetime64(x_range[0], 'M')
+            # datemax = np.datetime64(x_range[-1], 'Y') + np.timedelta64(1, 'Y')
+            datemax = np.datetime64(x_range[-1], 'M') + np.timedelta64(1, 'M')
+            ax.set_xlim(datemin, datemax)
+
+            # 设置刻度的显示格式
+            ax.format_xdata = mdates.DateFormatter('%Y-%m')
+            ax.format_ydata = lambda x: f'$x:.2f$'
+            ax.grid(True)
+            """自动调整刻度字符串"""
+            # 自动调整 x 轴的刻度字符串（旋转）使得每个字符串有足够的空间而不重叠
+            fig.autofmt_xdate()
+
+            ax.plot(x_range, testY)
+            ax.plot(x_range, np.array(pred))
+            ax.plot(x_range, upper_bound, "--")
+            ax.plot(x_range, lower_bound, "--")
+            ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
+            ax.scatter(miss_x, miss_y, c="dimgrey", marker="x")
+            plt.legend(("Real", method, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
+            plt.title(exchange.title())
+            plt.xlabel("时间", font1)
+            # plt.ylabel("Transaction Amount(USD)")
+            plt.ylabel("交易量（美元）", font1)
             plt.savefig('./exchange/figure/svr_prediction' + '/' + exchange + '_svr.png')
             plt.show()
 
