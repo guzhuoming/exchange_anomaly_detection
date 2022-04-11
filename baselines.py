@@ -20,6 +20,9 @@ from xgboost import XGBRegressor
 from pmdarima.arima import auto_arima
 from pmdarima.arima import ADFTest
 import matplotlib.dates as mdates
+
+plt.style.use(['science','no-latex'])
+
 # plt.rcParams['font.sans-serif'] = ['Times New Roman']  # 用来正常显示中文标签
 # plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 font1 = {'family': 'Microsoft YaHei',
@@ -28,7 +31,7 @@ font1 = {'family': 'Microsoft YaHei',
 
 exchanges = ["binance", "coinbase", "huobi", "kraken", "kucoin"]
 error_list = []
-method = "ARIMA"
+method = "HA"
 
 def data_split(data, train_rate, seq_len, pre_len=1):
     time_len, n_feature = data.shape
@@ -204,8 +207,8 @@ def baseline():
             ax.plot(x_range, np.array(prediction_val))
             ax.plot(x_range, upper_bound, "--")
             ax.plot(x_range, lower_bound, "--")
-            ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-            ax.scatter(miss_x, miss_y, c="dimgrey", marker="x")
+            ax.scatter(abnormal_x, abnormal_y, c="r", marker="o")
+            ax.scatter(miss_x, miss_y, c="dimgrey", marker="o")
             plt.legend(("Real", method, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
             plt.title(exchange.title())
             plt.xlabel("时间",font1)
@@ -366,8 +369,8 @@ def baseline():
                 ax.plot(x_range, np.array(pred))
                 ax.plot(x_range, upper_bound, "--")
                 ax.plot(x_range, lower_bound, "--")
-                ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-                ax.scatter(miss_x, miss_y, c="dimgrey", marker="x")
+                ax.scatter(abnormal_x, abnormal_y, c="r", marker="o")
+                ax.scatter(miss_x, miss_y, c="dimgrey", marker="o")
                 plt.legend(("Real", method, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
                 plt.title(exchange.title())
                 plt.xlabel("时间", font1)
@@ -495,8 +498,8 @@ def baseline():
             ax.plot(x_range, np.array(pred))
             ax.plot(x_range, upper_bound, "--")
             ax.plot(x_range, lower_bound, "--")
-            ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-            ax.scatter(miss_x, miss_y, c="dimgrey", marker="x")
+            ax.scatter(abnormal_x, abnormal_y, c="r", marker="o")
+            ax.scatter(miss_x, miss_y, c="dimgrey", marker="o")
             plt.legend(("Real", method, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
             plt.title(exchange.title())
             plt.xlabel("时间", font1)
