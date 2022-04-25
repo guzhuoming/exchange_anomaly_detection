@@ -30,12 +30,22 @@ import matplotlib.dates as mdates
 font1 = {'family': 'Microsoft YaHei',
          'weight': 'normal',
          'size': 13}
+
+plt.style.use(['science','no-latex'])
+
 tensorflow.random.set_seed(2)
 
 exchanges = ["binance", "coinbase", "huobi", "kraken", "kucoin"]
 
 beginDates = ['2021-01-30', '2021-11-05', '2020-11-03', '2020-06-25', '2021-02-15']
 endDates = ['2021-12-23', '2021-12-24', '2021-09-15', '2021-09-15', '2021-12-24']
+
+li = [] #储存使用LSTM检测出来的异常值所在位置
+li.append([95, 110, 111, 115, 116, 238])
+li.append([30])
+li.append([153, 190, 241])
+li.append([313, 327, 329])
+li.append([216, 256, 275, 295])
 
 # class Attention(Layer):
 #
@@ -98,10 +108,15 @@ class attention(Layer):
         return super(attention,self).get_config()
 
 
-def model_lstm_att(time_steps, input_dim, n_units):
-    K.clear_session()  # 清除之前的模型，省得压满内存
+def model_lstm_att(time_steps, input_dim, n_units, method="LSTM"):
+    K.clear_session()  # 清除之前的模型，省得压满内存x
     model_input = Input(shape=(time_steps, input_dim))
-    x = LSTM(n_units, return_sequences=True)(model_input)
+    if method == "LSTM":
+        x = LSTM(n_units, return_sequences=True)(model_input)
+    elif method == "GRU":
+        x = GRU(n_units, return_sequences=True)(model_input)
+    elif method == "RNN":
+        x = SimpleRNN(n_units, return_sequences=True)(model_input)
     x = attention()(x)
     x = Dense(1)(x)
     model = Model(model_input, x)
@@ -147,7 +162,7 @@ def data_split(data, train_rate, seq_len, pre_len=1):
     testY1 = np.array(testY)
     return trainX1, trainY1, testX1, testY1
 
-def lstm(n_units=64, seq_len=10, batch_size=64):
+def lstm(n_units=64, seq_len=10, batch_size=64, method="LSTM"):
     error_list = []
 
     rmse_list = []
@@ -180,9 +195,12 @@ def lstm(n_units=64, seq_len=10, batch_size=64):
             scaled_data[:, j] = temp
         trainX1, trainY1, testX1, testY1 = data_split(scaled_data, train_rate=train_rate, seq_len=seq_len)
 
-        model_name = "LSTM_attention"
-        if model_name=="LSTM_attention":
-            model = model_lstm_att(seq_len, n_features, n_units)
+        model_name = method+"_attention"
+        # print("model_name--------------")
+        # print(model_name
+
+        if model_name=="LSTM_attention" or model_name=="GRU_attention" or model_name=="RNN_attention":
+            model = model_lstm_att(seq_len, n_features, n_units, method=method)
         if model_name=="LSTM":
             model = model_lstm(seq_len, n_features, n_units)
 
@@ -232,7 +250,7 @@ def lstm(n_units=64, seq_len=10, batch_size=64):
             upper_bound = [it + 3 * np.std(testY) for it in prediction_val]
             lower_bound = [it - 3 * np.std(testY) for it in prediction_val]
 
-            fig, ax = plt.subplots(figsize=(10, 4))
+            fig, ax = plt.subplots(figsize=(10, 4),dpi=300)
             beginDate = beginDates[i]
             endDate = endDates[i]
 
@@ -247,6 +265,13 @@ def lstm(n_units=64, seq_len=10, batch_size=64):
                 if testY[j] > upper_bound[j]:
                     abnormal_x.append(x_range[j])
                     abnormal_y.append(testY[j])
+
+            miss_x = []
+            miss_y = []
+            for j in range(len(li[i])):
+                if x_range[li[i][j]] not in abnormal_x:
+                    miss_x.append(x_range[li[i][j]])
+                    miss_y.append(testY[li[i][j]])
 
             """设置坐标轴的格式"""
             # 设置主刻度, 每6个月一个刻度
@@ -278,13 +303,18 @@ def lstm(n_units=64, seq_len=10, batch_size=64):
             ax.plot(x_range, np.array(prediction_val))
             ax.plot(x_range, upper_bound, "--")
             ax.plot(x_range, lower_bound, "--")
-            ax.scatter(abnormal_x, abnormal_y, c="r", marker="x")
-            plt.legend(("Real", model_name, "Upper bound", "Lower bound", "Anomaly detected"), loc=2)
+            ax.scatter(abnormal_x, abnormal_y, c="r", marker="o")
+            ax.scatter(miss_x, miss_y, c="dimgrey", marker="o")
+            if method=="LSTM":
+                plt.legend(("Real", model_name, "Upper bound", "Lower bound", "Anomaly detected"), loc=2)
+            else:
+                plt.legend(("Real", model_name, "Upper bound", "Lower bound", "Anomaly detected", "Anomaly missed"), loc=2)
+
             plt.title(exchange.title())
             plt.xlabel("时间", font1)
             # plt.ylabel("Transaction Amount(USD)")
             plt.ylabel("交易量（美元）", font1)
-            plt.savefig('./exchange/figure/lstm_prediction_' + exchange + '_' + model_name + '_prediction.png')
+            plt.savefig('./exchange/figure/'+str.lower(method)+'_prediction_' + exchange + '_' + model_name + '_prediction.png')
             plt.show()
     for i in range(len(exchanges)):
         print(exchanges[i])
@@ -344,7 +374,7 @@ def cal_date():
             print(otherStyleTime)
 
 if __name__=='__main__':
-    lstm()
+    lstm(method="GRU") #method = LSTM, RNN, GRU
     # lstm(106, 6, 74)
     # parameter_sensitivity("Batch size", [16,32,64,128,256,512])
     # parameter_sensitivity("Number of hidden units", [16,32,64,128])
