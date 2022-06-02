@@ -1,1 +1,1 @@
-# exchange_abnormly_detection
+# exchange_anomaly_detection
